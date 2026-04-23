@@ -110,6 +110,10 @@ def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
         delay_sum = [0.0] * num_epochs
         served_sum = [0.0] * num_epochs
         cancelled_sum = [0.0] * num_epochs
+        starvation_sum = [0.0] * num_epochs
+        honest_fairness_sum_by_epoch = [0.0] * num_epochs
+        overall_fairness_sum_by_epoch = [0.0] * num_epochs
+
 
         # Keep report generation quiet and avoid pop-up plots for each run.
         CFG["verbose"] = False
@@ -124,17 +128,26 @@ def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
                 delay_sum[epoch_idx] += cycle["avg_honest_delay"]
                 served_sum[epoch_idx] += cycle["served"]
                 cancelled_sum[epoch_idx] += cycle["cancelled"]
+                starvation_sum[epoch_idx] += cycle["starvation_rate"]
+                honest_fairness_sum_by_epoch[epoch_idx] += cycle["honest_fairness"]
+                overall_fairness_sum_by_epoch[epoch_idx] += cycle["overall_fairness"]
 
         avg_clearing = [value / num_rounds for value in clearing_sum]
         avg_delay = [value / num_rounds for value in delay_sum]
         avg_served = [value / num_rounds for value in served_sum]
         avg_cancelled = [value / num_rounds for value in cancelled_sum]
+        avg_starvation = [value / num_rounds for value in starvation_sum]
+        avg_honest_fairness = [value / num_rounds for value in honest_fairness_sum_by_epoch]
+        avg_overall_fairness = [value / num_rounds for value in overall_fairness_sum_by_epoch]
 
         overall = {
             "avg_clearing_price": sum(avg_clearing) / num_epochs,
             "avg_honest_delay": sum(avg_delay) / num_epochs,
             "avg_served": sum(avg_served) / num_epochs,
             "avg_cancelled": sum(avg_cancelled) / num_epochs,
+            'avg_starvation_rate': sum(starvation_sum) / (num_epochs * num_rounds),
+            'avg_honest_fairness': sum(honest_fairness_sum_by_epoch) / (num_epochs * num_rounds),
+            'avg_overall_fairness': sum(overall_fairness_sum_by_epoch) / (num_epochs * num_rounds),
         }
 
         distribution = {
@@ -165,6 +178,9 @@ def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
                 "avg_delay": avg_delay,
                 "avg_served": avg_served,
                 "avg_cancelled": avg_cancelled,
+                "avg_starvation": avg_starvation,
+                "avg_honest_fairness": avg_honest_fairness,
+                "avg_overall_fairness": avg_overall_fairness,
             },
         }
     finally:
@@ -332,6 +348,9 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
             <th>Avg Honest Delay</th>
             <th>Avg Served</th>
             <th>Avg Cancelled</th>
+            <th>Avg Starvation Rate</th>
+            <th>Avg Honest Fairness</th>
+            <th>Avg Overall Fairness</th>
           </tr>
         </thead>
         <tbody id=\"summaryBody\"></tbody>
@@ -414,6 +433,9 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
         const baseDelay = baseline ? baseline.avg_honest_delay : item.overall.avg_honest_delay;
         const baseServed = baseline ? baseline.avg_served : item.overall.avg_served;
         const baseCancelled = baseline ? baseline.avg_cancelled : item.overall.avg_cancelled;
+        const baseStarvation = baseline ? baseline.avg_starvation_rate : item.overall.avg_starvation_rate;
+        const baseHonestFairness = baseline ? baseline.avg_honest_fairness : item.overall.avg_honest_fairness;
+        const baseOverallFairness = baseline ? baseline.avg_overall_fairness : item.overall.avg_overall_fairness;
 
         return `<tr>
           <td><strong>${{item.name}}</strong><div class=\"small\">${{item.description}}</div></td>
@@ -422,6 +444,9 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
           <td>${{metricWithDelta(item.overall.avg_honest_delay, baseDelay)}}</td>
           <td>${{metricWithDelta(item.overall.avg_served, baseServed, true)}}</td>
           <td>${{metricWithNumberDelta(item.overall.avg_cancelled, baseCancelled)}}</td>
+          <td>${{metricWithDelta(item.overall.avg_starvation_rate * 100, baseStarvation * 100)}}</td>
+          <td>${{metricWithDelta(item.overall.avg_honest_fairness, baseHonestFairness, true)}}</td>
+          <td>${{metricWithDelta(item.overall.avg_overall_fairness, baseOverallFairness, true)}}</td>
         </tr>`;
       }}).join("");
       body.innerHTML = rows;

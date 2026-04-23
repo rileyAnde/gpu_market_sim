@@ -37,4 +37,5 @@ CFG = {
     "seed": None,
     "plot": True,
     "verbose": True,
+    "starvation_threshold": .4 #or .8 of epochs 
 }

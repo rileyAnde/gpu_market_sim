@@ -120,7 +120,7 @@ class Sim():
     def _resolve_auction(self, bids):
         if not bids:
             return [], [], 0
-
+        #HANNAH this is where the winners are selected 
         bids_sorted = sorted(bids, key=lambda x: x["price"], reverse=True)
         winners = bids_sorted[:len(self.gpus)]
         losers = bids_sorted[len(self.gpus):]
@@ -152,6 +152,32 @@ class Sim():
                 agent.total_jobs += 1
             else:
                 agent.wait_epochs += 1
+    #measure of resourse allocation, where 0 is perfectly unequal and 1 is perfectly equal
+    def _jain_index(self, values):
+        n = len(values)
+        if n == 0:
+            return 1.0
+        sum_vals = sum(values)
+        sum_squares = sum(v ** 2 for v in values)
+        if sum_squares == 0:
+            return 1.0
+        return (sum_vals ** 2) / (n * sum_squares)
+
+    def _fairness_snapshot(self):
+        #fairness among honest agents only
+        honest = [a for a in self.agents if a.kind == "honest"]
+        service_vals = [a.total_jobs for a in honest]
+        jains_honest = self._jain_index(service_vals)
+        #overall market fairness, including malicious agents 
+        service_vals_all = [a.total_jobs for a in self.agents]
+        jains_all = self._jain_index(service_vals_all)
+
+        #measures how long honest agents have been waiting without service, to capture starvation
+        starvation_threshold = CFG["starvation_threshold"] * self.num_epochs
+        starved = sum(1 for a in honest if a.waiting and a.wait_epochs >= starvation_threshold)
+        starvation_rate = starved / len(honest) if honest else 0.0
+
+        return jains_honest, jains_all, starvation_rate
 
     def start_auction_round(self, epoch):
         bids = self._collect_bids()
@@ -174,6 +200,7 @@ class Sim():
             item["agent"].total_cancels += 1
 
         self._update_delays(served_agents)
+        honest_fairness, overall_fairness, starvation_rate = self._fairness_snapshot()
 
         honest_waits = [a.wait_epochs for a in self.agents if a.kind == "honest" and a.waiting]
         avg_wait = (sum(honest_waits) / len(honest_waits)) if honest_waits else 0.0
@@ -193,6 +220,9 @@ class Sim():
             "cancelled": len(cancelled),
             "clearing_price": clearing,
             "avg_honest_delay": avg_wait,
+            "honest_fairness": honest_fairness,
+            "overall_fairness": overall_fairness,
+            "starvation_rate": starvation_rate,
         }
 
     def run(self, plot=False, verbose=True):
@@ -268,6 +298,25 @@ def plot_multi_round_averages(
 
     plt.show()
 
+def plot_fairness_comparison(honest_jains, overall_jains):
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+
+    ax.bar(["Honest", "Overall"], [honest_jains, overall_jains], color=["tab:green", "tab:blue"])
+    ax.set_title("Jain's Fairness Index")
+    ax.set_ylim(0, 1)
+
+    plt.show()
+
+def plot_starvation_rate(starvation_rates):
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+
+    ax.plot(starvation_rates, color="tab:red")
+    ax.set_title("Starvation Rate Among Honest Agents")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Starvation Rate")
+
+    plt.show()
+
 
 if __name__ == "__main__":
     num_rounds = CFG["num_rounds"]
@@ -277,6 +326,10 @@ if __name__ == "__main__":
     delay_sum_by_epoch = [0.0] * num_epochs
     served_sum_by_epoch = [0.0] * num_epochs
     cancelled_sum_by_epoch = [0.0] * num_epochs
+    honest_fairness_sum_by_epoch = [0.0] * num_epochs
+    overall_fairness_sum_by_epoch = [0.0] * num_epochs
+    starvation_sum_by_epoch = [0.0] * num_epochs
+
 
     for _ in range(num_rounds):
         sim = Sim()
@@ -287,17 +340,27 @@ if __name__ == "__main__":
             delay_sum_by_epoch[epoch_idx] += auction_cycle["avg_honest_delay"]
             served_sum_by_epoch[epoch_idx] += auction_cycle["served"]
             cancelled_sum_by_epoch[epoch_idx] += auction_cycle["cancelled"]
+            honest_fairness_sum_by_epoch[epoch_idx] += auction_cycle["honest_fairness"]
+            overall_fairness_sum_by_epoch[epoch_idx] += auction_cycle["overall_fairness"]
+            starvation_sum_by_epoch[epoch_idx] += auction_cycle["starvation_rate"]
+
 
     avg_clearing_by_epoch = [val / num_rounds for val in clearing_sum_by_epoch]
     avg_delay_by_epoch = [val / num_rounds for val in delay_sum_by_epoch]
     avg_served_by_epoch = [val / num_rounds for val in served_sum_by_epoch]
     avg_cancelled_by_epoch = [val / num_rounds for val in cancelled_sum_by_epoch]
+    avg_honest_fairness_by_epoch = [val / num_rounds for val in honest_fairness_sum_by_epoch]
+    avg_overall_fairness_by_epoch = [val / num_rounds for val in overall_fairness_sum_by_epoch]
+    avg_starvation_by_epoch = [val / num_rounds for val in starvation_sum_by_epoch]
 
     avg_clearing_overall = sum(avg_clearing_by_epoch) / num_epochs
     avg_delay_overall = sum(avg_delay_by_epoch) / num_epochs
 
     print(f"Avg clearing price (overall): {avg_clearing_overall:.2f}")
     print(f"Avg honest delay (overall): {avg_delay_overall:.2f}")
+    print(f"Avg honest fairness (overall): {avg_honest_fairness_by_epoch[-1]:.4f}")
+    print(f"Avg overall fairness (overall): {avg_overall_fairness_by_epoch[-1]:.4f}")
+    print(f"Avg starvation rate (overall): {avg_starvation_by_epoch[-1]:.4f}")
 
     if CFG["plot"]:
         plot_multi_round_averages(
@@ -306,3 +369,8 @@ if __name__ == "__main__":
             avg_served_by_epoch,
             avg_cancelled_by_epoch,
         )
+        plot_fairness_comparison(
+            avg_honest_fairness_by_epoch[-1],      
+            avg_overall_fairness_by_epoch[-1], 
+        )
+        plot_starvation_rate(avg_starvation_by_epoch)
