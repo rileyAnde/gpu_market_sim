@@ -86,10 +86,20 @@ class Sim():
 
             if not should_bid:
                 continue
-
-            bid_price = self._value_bid(agent)
-            bid_price = bid_price - (bid_price % self.bid_increment)
-            bid_price = max(self.min_value, bid_price)
+            if CFG['ProfitMaximizing']:
+                bid_price = self._value_bid(agent)
+                bid_price = bid_price - (bid_price % self.bid_increment)
+                bid_price = max(self.min_value, bid_price)
+            if CFG['UtilizationMaximizing']:
+                bid_price = self._value_bid(agent)
+                utilization_value = bid_price/agent.total_jobs if agent.total_jobs > 0 else bid_price
+                bid_price = utilization_value - (utilization_value % self.bid_increment)
+                bid_price = max(self.min_value, bid_price)
+            if CFG['FairShareMaximizing']:
+                fair_share_value = ((agent.total_wins - agent.total_cancels) / (agent.total_jobs ))* (1/agent.total_jobs) if agent.total_jobs > 0 else 1
+                bid_price = self._value_bid(agent) *  fair_share_value
+                bid_price = bid_price - (bid_price % self.bid_increment)
+                bid_price = max(self.min_value, bid_price)
 
             # If this is new demand, mark the agent as waiting for service.
             if not agent.waiting:
@@ -165,16 +175,16 @@ class Sim():
 
     def _fairness_snapshot(self):
         #fairness among honest agents only
-        honest = [a for a in self.agents if a.kind == "honest"]
-        service_vals = [a.total_jobs for a in honest]
+        honest = [agent for agent in self.agents if agent.kind == "honest"]
+        service_vals = [agent.total_jobs for agent in honest]
         jains_honest = self._jain_index(service_vals)
         #overall market fairness, including malicious agents 
-        service_vals_all = [a.total_jobs for a in self.agents]
+        service_vals_all = [agent.total_jobs for agent in self.agents]
         jains_all = self._jain_index(service_vals_all)
 
         #measures how long honest agents have been waiting without service, to capture starvation
         starvation_threshold = CFG["starvation_threshold"] * self.num_epochs
-        starved = sum(1 for a in honest if a.waiting and a.wait_epochs >= starvation_threshold)
+        starved = sum(1 for agent in honest if agent.waiting and agent.wait_epochs >= starvation_threshold)
         starvation_rate = starved / len(honest) if honest else 0.0
 
         return jains_honest, jains_all, starvation_rate
@@ -267,6 +277,7 @@ class Sim():
 
 
 def plot_multi_round_averages(
+    
     avg_clearing_by_epoch,
     avg_delay_by_epoch,
     avg_served_by_epoch,

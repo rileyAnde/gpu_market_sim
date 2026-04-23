@@ -33,6 +33,11 @@ CFG = {
     "sybil_cancel_prob": 1.0,
     "griefer_cancel_prob": 1.0,
 
+    # auction rules - only one should be True
+    "ProfitMaximizing": True,
+    "UtilizationMaximizing": False,
+    'FairShareMaximizing': False,
+
     # misc
     "seed": None,
     "plot": True,

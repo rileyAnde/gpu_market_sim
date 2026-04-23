@@ -95,6 +95,25 @@ def default_scenarios(base_cfg):
     ]
     return scenarios
 
+def make_auction_types(base_cfg):
+    auction_types = [
+        {
+            "name": "Profit Maximizing",
+            "description": "Auctioneer prioritizes maximizing profit, which may lead to higher prices and potential fairness issues.",
+            "overrides": {"ProfitMaximizing": True, "UtilizationMaximizing": False, 'FairShareMaximizing': False},
+        },
+        {
+            "name": "Utilization Maximizing",
+            "description": "Auctioneer prioritizes maximizing resource utilization, which may lead to more efficient allocation but lower profits.",
+            "overrides": {"ProfitMaximizing": False, "UtilizationMaximizing": True, 'FairShareMaximizing': False},
+        },
+        {
+            "name": "Fair Share Maximizing",
+            "description": "Auctioneer prioritizes maximizing fairness among participants, which may lead to more equitable outcomes but potentially lower profits and utilization.",
+            "overrides": {"ProfitMaximizing": False, "UtilizationMaximizing": False, 'FairShareMaximizing': True},
+        },
+    ]
+    return auction_types
 
 def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
     original_cfg = deepcopy(CFG)
@@ -117,11 +136,11 @@ def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
 
         # Keep report generation quiet and avoid pop-up plots for each run.
         CFG["verbose"] = False
-        CFG["plot"] = False
+        CFG["plot"] = True
 
         for _ in range(num_rounds):
             sim = Sim()
-            round_stats = sim.run(plot=False, verbose=False)
+            round_stats = sim.run(plot=CFG["plot"], verbose=CFG["verbose"])
 
             for epoch_idx, cycle in enumerate(round_stats):
                 clearing_sum[epoch_idx] += cycle["clearing_price"]
@@ -188,8 +207,8 @@ def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
         CFG.update(original_cfg)
 
 
-def build_html(report_title, generated_at, baseline_cfg, scenario_results):
-    scenario_payload = json.dumps(scenario_results)
+def build_html(report_title, generated_at, baseline_cfg, auction_results):
+    auction_payload = json.dumps(auction_results)
     base_cfg_payload = json.dumps(baseline_cfg)
 
     return f"""<!doctype html>
@@ -336,35 +355,18 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
         <span class=\"pill\">griefer_cancel={baseline_cfg["griefer_cancel_prob"]}</span>
       </div>
     </div>
-
-    <div class=\"section\">
-      <h2>Scenario Summary</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Scenario</th>
-            <th>Malicious Share</th>
-            <th>Avg Clearing Price</th>
-            <th>Avg Honest Delay</th>
-            <th>Avg Served</th>
-            <th>Avg Cancelled</th>
-            <th>Avg Starvation Rate</th>
-            <th>Avg Honest Fairness</th>
-            <th>Avg Overall Fairness</th>
-          </tr>
-        </thead>
-        <tbody id=\"summaryBody\"></tbody>
-      </table>
-    </div>
-
     <div class=\"section\">
       <h2>Scenario Details</h2>
       <div class=\"grid\" id=\"scenarioCards\"></div>
     </div>
+    <div class=\"section\">
+      <h2>Auction Type Summaries</h2>
+      <div id=\"auctionSummaries\"></div>
+    </div>
   </div>
 
   <script>
-    const scenarioData = {scenario_payload};
+    const auctionData = {auction_payload};
     const baselineCfg = {base_cfg_payload};
 
     const colors = [
@@ -425,8 +427,12 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
       return `${{round2(value)}}<span class=\"${{deltaClass}}\">(${{signed2(delta)}})</span>`;
     }}
 
-    function makeSummaryTable() {{
-      const body = document.getElementById("summaryBody");
+    function makeSummaryTable(scenarioData, bodyId) {{
+      const body = document.getElementById(bodyId);
+      if (!body) {{
+        return;
+      }}
+
       const baseline = scenarioData.length > 0 ? scenarioData[0].overall : null;
       const rows = scenarioData.map((item) => {{
         const baseClearing = baseline ? baseline.avg_clearing_price : item.overall.avg_clearing_price;
@@ -452,8 +458,41 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
       body.innerHTML = rows;
     }}
 
+    function makeAuctionSummarySections() {{
+      const host = document.getElementById("auctionSummaries");
+
+      host.innerHTML = auctionData.map((auction, idx) => `
+        <div class="section">
+          <h3>${{auction.auction_type}}</h3>
+          <div class="small">${{auction.auction_description}}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Malicious Share</th>
+                <th>Avg Clearing Price</th>
+                <th>Avg Honest Delay</th>
+                <th>Avg Served</th>
+                <th>Avg Cancelled</th>
+                <th>Avg Starvation Rate</th>
+                <th>Avg Honest Fairness</th>
+                <th>Avg Overall Fairness</th>
+              </tr>
+            </thead>
+            <tbody id="summaryBody-${{idx}}"></tbody>
+          </table>
+        </div>
+      `).join("");
+
+      auctionData.forEach((auction, idx) => {{
+        makeSummaryTable(auction.scenarios, `summaryBody-${{idx}}`);
+      }});
+    }}
+
     function makeScenarioCards() {{
       const host = document.getElementById("scenarioCards");
+      const scenarioData = auctionData.length > 0 ? auctionData[0].scenarios : [];
+
       host.innerHTML = scenarioData.map((item) => {{
         return `<div class=\"card\">
           <h3>${{item.name}}</h3>
@@ -512,7 +551,7 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
       }});
     }}
 
-    makeSummaryTable();
+    makeAuctionSummarySections();
     makeScenarioCards();
   </script>
 </body>
@@ -522,17 +561,29 @@ def build_html(report_title, generated_at, baseline_cfg, scenario_results):
 
 def generate_report(output_path=None):
     base_cfg = deepcopy(CFG)
+    auction_types = make_auction_types(base_cfg)
     scenarios = default_scenarios(base_cfg)
 
     results = []
-    for scenario in scenarios:
+    for auction in auction_types:
+      scenario_results = []
+      for scenario in scenarios:
+        scenario_cfg = deepcopy(auction["overrides"])
+        scenario_cfg.update(scenario["overrides"])
+
         result = run_one_scenario(
-            scenario_name=scenario["name"],
-            description=scenario["description"],
-            cfg_override=scenario["overrides"],
-            base_cfg=base_cfg,
+          scenario_name=scenario["name"],
+          description=scenario["description"],
+          cfg_override=scenario_cfg,
+          base_cfg=base_cfg,
         )
-        results.append(result)
+        scenario_results.append(result)
+
+      results.append({
+        "auction_type": auction["name"],
+        "auction_description": auction["description"],
+        "scenarios": scenario_results,
+      })
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     report_title = "GPU Spot Market Multi-Scenario Report"
