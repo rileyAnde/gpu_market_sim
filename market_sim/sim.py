@@ -51,6 +51,15 @@ class Sim():
         self.griefer_bid_boost_max = CFG["griefer_bid_boost_max"]
         self.sybil_bid_floor_fraction = CFG["sybil_bid_floor_fraction"]
 
+        #setting details 
+        if CFG['ProfitMaximizing']:
+            self.auction_type = "Profit Maximizing"
+        elif CFG['UtilizationMaximizing']:
+            self.auction_type = "Utilization Maximizing"
+        elif CFG['FairShareMaximizing']:
+            self.auction_type = "Fair Share Maximizing"
+        else:
+            self.auction_type = "Undefined"
         # metrics
         self.metrics = {
             "served_honest": [],
@@ -274,10 +283,10 @@ class Sim():
         ax[1][1].set_xlabel("Epoch")
 
         plt.show()
+        plt.savefig(f"figures/{self.auction_type}_metrics.png")
 
 
 def plot_multi_round_averages(
-    
     avg_clearing_by_epoch,
     avg_delay_by_epoch,
     avg_served_by_epoch,
@@ -308,25 +317,27 @@ def plot_multi_round_averages(
     ax[1][1].set_ylabel("Delay (epochs)")
 
     plt.show()
+    # plt.savefig(f"figures/{scenario_name}_averages.png")
 
-def plot_fairness_comparison(honest_jains, overall_jains):
+def plot_fairness_comparison( honest_jains, overall_jains):
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
 
     ax.bar(["Honest", "Overall"], [honest_jains, overall_jains], color=["tab:green", "tab:blue"])
-    ax.set_title("Jain's Fairness Index")
+    ax.set_title(f"Jain's Fairness Index ")
     ax.set_ylim(0, 1)
 
     plt.show()
-
-def plot_starvation_rate(starvation_rates):
+    # plt.savefig(f"figures/{scenario_name}_fairness_comparison.png")
+def plot_starvation_rate( starvation_rates):
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
 
     ax.plot(starvation_rates, color="tab:red")
-    ax.set_title("Starvation Rate Among Honest Agents")
+    ax.set_title(f"Starvation Rate Among Honest Agents ")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Starvation Rate")
 
     plt.show()
+    # plt.savefig(f"figures/{scenario_name}_starvation_rate.png")
 
 
 if __name__ == "__main__":
@@ -382,6 +393,6 @@ if __name__ == "__main__":
         )
         plot_fairness_comparison(
             avg_honest_fairness_by_epoch[-1],      
-            avg_overall_fairness_by_epoch[-1], 
+            avg_overall_fairness_by_epoch[-1]
         )
         plot_starvation_rate(avg_starvation_by_epoch)
