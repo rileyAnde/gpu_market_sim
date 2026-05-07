@@ -107,7 +107,7 @@ class Sim():
                 bid_price = utilization_value - (utilization_value % self.bid_increment)
                 bid_price = max(self.min_value, bid_price)
             if CFG['FairShareMaximizing']:
-                fair_share_value = ((agent.total_wins - agent.total_cancels) / (agent.total_jobs ))* (1/agent.total_jobs) if agent.total_jobs > 0 else 1
+                fair_share_value = ((1-(agent.total_cancels/agent.total_jobs))*(1/agent.total_jobs)) if agent.total_jobs > 0 else 1
                 bid_price = self._value_bid(agent) *  fair_share_value
                 bid_price = bid_price - (bid_price % self.bid_increment)
                 bid_price = max(self.min_value, bid_price)
@@ -141,7 +141,6 @@ class Sim():
     def _resolve_auction(self, bids):
         if not bids:
             return [], [], 0
-        #HANNAH this is where the winners are selected 
         bids_sorted = sorted(bids, key=lambda x: x["price"], reverse=True)
         winners = bids_sorted[:len(self.gpus)]
         losers = bids_sorted[len(self.gpus):]
