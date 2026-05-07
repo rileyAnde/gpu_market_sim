@@ -163,7 +163,7 @@ def run_one_scenario(scenario_name, auction_type, description, cfg_override, bas
 
 
         overall = {
-            "avg_clearing_price": sum(avg_clearing) / num_epochs,
+            "avg_clearing_price": (sum(avg_clearing) / num_epochs)/100,
             "avg_honest_delay": sum(avg_delay) / num_epochs,
             "avg_served": sum(avg_served) / num_epochs,
             "avg_cancelled": sum(avg_cancelled) / num_epochs,
