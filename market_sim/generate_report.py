@@ -8,6 +8,7 @@ Usage:
 from copy import deepcopy
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 
 from cfg import CFG
@@ -115,7 +116,7 @@ def make_auction_types(base_cfg):
     ]
     return auction_types
 
-def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
+def run_one_scenario(scenario_name, auction_type, description, cfg_override, base_cfg):
     original_cfg = deepcopy(CFG)
     try:
         CFG.clear()
@@ -158,6 +159,8 @@ def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
         avg_starvation = [value / num_rounds for value in starvation_sum]
         avg_honest_fairness = [value / num_rounds for value in honest_fairness_sum_by_epoch]
         avg_overall_fairness = [value / num_rounds for value in overall_fairness_sum_by_epoch]
+        avg_starvation = [val / num_rounds for val in starvation_sum]
+
 
         overall = {
             "avg_clearing_price": sum(avg_clearing) / num_epochs,
@@ -168,6 +171,31 @@ def run_one_scenario(scenario_name, description, cfg_override, base_cfg):
             'avg_honest_fairness': sum(honest_fairness_sum_by_epoch) / (num_epochs * num_rounds),
             'avg_overall_fairness': sum(overall_fairness_sum_by_epoch) / (num_epochs * num_rounds),
         }
+
+        if CFG["plot"]:
+          # Use an instance to call plotting instance methods so parameters align correctly.
+          plot_sim = Sim()
+          plot_sim.plot_multi_round_averages(
+            avg_clearing,
+            avg_delay,
+            avg_served,
+            avg_cancelled,
+            scenario_name.replace(" ", "_"),
+            auction_type.replace(" ", "_")
+          )
+          plot_sim.plot_fairness_over_time(
+            avg_honest_fairness,
+            avg_overall_fairness,
+            scenario_name.replace(" ", "_"),
+            auction_type.replace(" ", "_")
+          )
+          plot_sim.plot_fairness_comparison(
+            avg_honest_fairness[-1],
+            avg_overall_fairness[-1],
+            scenario_name.replace(" ", "_"),
+            auction_type.replace(" ", "_")
+          )
+          plot_sim.plot_starvation_rate(avg_starvation, scenario_name.replace(" ", "_"), auction_type.replace(" ", "_"))
 
         distribution = {
             "honest": CFG["num_agents"],
@@ -566,6 +594,7 @@ def generate_report(output_path=None):
 
     results = []
     for auction in auction_types:
+      os.makedirs(f"{auction['name'].replace(' ', '_')}_figures", exist_ok=True)
       scenario_results = []
       for scenario in scenarios:
         scenario_cfg = deepcopy(auction["overrides"])
@@ -576,6 +605,7 @@ def generate_report(output_path=None):
           description=scenario["description"],
           cfg_override=scenario_cfg,
           base_cfg=base_cfg,
+          auction_type=auction["name"],
         )
         scenario_results.append(result)
 

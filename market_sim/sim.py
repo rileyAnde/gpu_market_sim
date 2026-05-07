@@ -5,6 +5,7 @@ This file contains the market simulation itself. It handles initialization
 of all agent behaviour, tracks market variables, and optionally plots a number of statistics.
 '''
 # IMPORTS
+import os
 import random
 import matplotlib.pyplot as plt
 from agents import build_agents
@@ -27,6 +28,7 @@ class GPU():
 class Sim():
     def __init__(self):
         self.rng = random.Random(CFG["seed"])
+        self.output_path = None
 
         # store agent and gpu class instances
         self.agents = build_agents(CFG)
@@ -53,11 +55,11 @@ class Sim():
 
         #setting details 
         if CFG['ProfitMaximizing']:
-            self.auction_type = "Profit Maximizing"
+            self.auction_type = "Profit_Maximizing"
         elif CFG['UtilizationMaximizing']:
-            self.auction_type = "Utilization Maximizing"
+            self.auction_type = "Utilization_Maximizing"
         elif CFG['FairShareMaximizing']:
-            self.auction_type = "Fair Share Maximizing"
+            self.auction_type = "Fair_Share_Maximizing"
         else:
             self.auction_type = "Undefined"
         # metrics
@@ -282,62 +284,98 @@ class Sim():
         ax[1][1].set_title("Average Honest Delay")
         ax[1][1].set_xlabel("Epoch")
 
-        plt.show()
-        plt.savefig(f"figures/{self.auction_type}_metrics.png")
+        if CFG["show_plots"]:
+            plt.show()
+        os.makedirs("figures", exist_ok=True)
+        fig.savefig(f"figures/{self.auction_type}_metrics.png")
+        plt.close(fig)
+            
 
 
-def plot_multi_round_averages(
-    avg_clearing_by_epoch,
-    avg_delay_by_epoch,
-    avg_served_by_epoch,
-    avg_cancelled_by_epoch,
-):
-    epochs = list(range(len(avg_clearing_by_epoch)))
+    def plot_multi_round_averages(
+        self,
+        avg_clearing_by_epoch,
+        avg_delay_by_epoch,
+        avg_served_by_epoch,
+        avg_cancelled_by_epoch,
+        scenario_name = "",
+        auction_type = ""
+    ):
+        epochs = list(range(len(avg_clearing_by_epoch)))
 
-    fig, ax = plt.subplots(2, 2, figsize=(11, 7), constrained_layout=True)
+        fig, ax = plt.subplots(2, 2, figsize=(11, 7), constrained_layout=True)
 
-    ax[0][0].plot(epochs, avg_clearing_by_epoch, color="tab:blue")
-    ax[0][0].set_title("Avg Clearing Price Across Rounds")
-    ax[0][0].set_xlabel("Epoch")
-    ax[0][0].set_ylabel("Price")
+        ax[0][0].plot(epochs, avg_clearing_by_epoch, color="tab:blue")
+        ax[0][0].set_title("Avg Clearing Price Across Rounds")
+        ax[0][0].set_xlabel("Epoch")
+        ax[0][0].set_ylabel("Price")
 
-    ax[0][1].plot(epochs, avg_cancelled_by_epoch, color="tab:red")
-    ax[0][1].set_title("Avg Cancelled Wins Across Rounds")
-    ax[0][1].set_xlabel("Epoch")
-    ax[0][1].set_ylabel("Cancelled wins")
+        ax[0][1].plot(epochs, avg_cancelled_by_epoch, color="tab:red")
+        ax[0][1].set_title("Avg Cancelled Wins Across Rounds")
+        ax[0][1].set_xlabel("Epoch")
+        ax[0][1].set_ylabel("Cancelled wins")
 
-    ax[1][0].plot(epochs, avg_served_by_epoch, color="tab:green")
-    ax[1][0].set_title("Avg Jobs Served Across Rounds")
-    ax[1][0].set_xlabel("Epoch")
-    ax[1][0].set_ylabel("Served jobs")
+        ax[1][0].plot(epochs, avg_served_by_epoch, color="tab:green")
+        ax[1][0].set_title("Avg Jobs Served Across Rounds")
+        ax[1][0].set_xlabel("Epoch")
+        ax[1][0].set_ylabel("Served jobs")
 
-    ax[1][1].plot(epochs, avg_delay_by_epoch, color="tab:orange")
-    ax[1][1].set_title("Avg Honest Delay Across Rounds")
-    ax[1][1].set_xlabel("Epoch")
-    ax[1][1].set_ylabel("Delay (epochs)")
+        ax[1][1].plot(epochs, avg_delay_by_epoch, color="tab:orange")
+        ax[1][1].set_title("Avg Honest Delay Across Rounds")
+        ax[1][1].set_xlabel("Epoch")
+        ax[1][1].set_ylabel("Delay (epochs)")
+        if CFG["show_plots"]:
+            plt.show()
+        os.makedirs(f"{auction_type}_figures", exist_ok=True)
+        fig.savefig(f"{auction_type}_figures/{scenario_name}_averages.png")
+        plt.close(fig)
 
-    plt.show()
-    # plt.savefig(f"figures/{scenario_name}_averages.png")
+    def plot_fairness_over_time(
+            self, 
+            honest_fairness_by_epoch, 
+            overall_fairness_by_epoch, 
+            scenario_name = "",
+            auction_type = ""
+        ):
+        epochs = list(range(len(honest_fairness_by_epoch)))
 
-def plot_fairness_comparison( honest_jains, overall_jains):
-    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
 
-    ax.bar(["Honest", "Overall"], [honest_jains, overall_jains], color=["tab:green", "tab:blue"])
-    ax.set_title(f"Jain's Fairness Index ")
-    ax.set_ylim(0, 1)
+        ax.plot(epochs, honest_fairness_by_epoch, label="Honest Jain's Index", color="tab:green")
+        ax.plot(epochs, overall_fairness_by_epoch, label="Overall Jain's Index", color="tab:blue")
+        ax.set_title(f"Fairness Over Time")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Jain's Fairness Index")
+        ax.legend()
+        if CFG["show_plots"]:
+            plt.show()
+        os.makedirs(f"{auction_type}_figures", exist_ok=True)
+        fig.savefig(f"{auction_type}_figures/{scenario_name}_fairness_over_time.png")
+        plt.close(fig)
 
-    plt.show()
-    # plt.savefig(f"figures/{scenario_name}_fairness_comparison.png")
-def plot_starvation_rate( starvation_rates):
-    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    def plot_fairness_comparison(self, honest_jains, overall_jains, scenario_name = "", auction_type = ""):
+        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
 
-    ax.plot(starvation_rates, color="tab:red")
-    ax.set_title(f"Starvation Rate Among Honest Agents ")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Starvation Rate")
+        ax.bar(["Honest", "Overall"], [honest_jains, overall_jains], color=["tab:green", "tab:blue"])
+        ax.set_title(f"Jain's Fairness Index ")
+        ax.set_ylim(0, 1)
+        if CFG["show_plots"]:
+            plt.show()
+        os.makedirs(f"{auction_type}_figures", exist_ok=True)
+        fig.savefig(f"{auction_type}_figures/{scenario_name}_fairness_comparison.png")
+        plt.close(fig)
+    def plot_starvation_rate(self, starvation_rates, scenario_name = "", auction_type = ""):
+        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
 
-    plt.show()
-    # plt.savefig(f"figures/{scenario_name}_starvation_rate.png")
+        ax.plot(starvation_rates, color="tab:red")
+        ax.set_title(f"Starvation Rate Among Honest Agents ")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Starvation Rate")
+        if CFG["show_plots"]:
+            plt.show()
+        os.makedirs(f"{auction_type}_figures", exist_ok=True)
+        fig.savefig(f"{auction_type}_figures/{scenario_name}_starvation_rate.png")
+        plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -385,14 +423,14 @@ if __name__ == "__main__":
     print(f"Avg starvation rate (overall): {avg_starvation_by_epoch[-1]:.4f}")
 
     if CFG["plot"]:
-        plot_multi_round_averages(
+        sim.plot_multi_round_averages(
             avg_clearing_by_epoch,
             avg_delay_by_epoch,
             avg_served_by_epoch,
             avg_cancelled_by_epoch,
         )
-        plot_fairness_comparison(
+        sim.plot_fairness_comparison(
             avg_honest_fairness_by_epoch[-1],      
             avg_overall_fairness_by_epoch[-1]
         )
-        plot_starvation_rate(avg_starvation_by_epoch)
+        sim.plot_starvation_rate(avg_starvation_by_epoch)
